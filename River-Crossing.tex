@@ -1,0 +1,509 @@
+\documentclass{article}
+\usepackage[british]{babel}
+
+\title{River Crossing --- Wolf, Sheep, and Cabbage}
+\author{Dr Alun Moon}
+
+\usepackage{tlatex}
+\newcommand{\implies}{\Rightarrow}
+\begin{document}
+\maketitle
+
+\section{Requirements}
+\begin{quote}
+A farmer is on the bank of a river with a wolf, a sheep and a cabbage. He wants to cross the river, taking with him the wolf, sheep, and cabbage. There is a boat that can fit the farmer plus one of the wolf, the sheep, or the cabbage. However, if the wolf and the sheep are ever left on the same bank without the farmer, the wolf will eat the sheep. If the sheep and the cabbage are ever left on the same bank without the farmer, the sheep will eat the cabbage. How can the farmer safely transport the wolf, the sheep, and the cabbage so that all of them are eventually on the other side of the river together?
+\end{quote}
+
+\section{Discussion}
+\subsection{State}
+\paragraph{River banks}  The first step is that the river banks can be modelled
+as sets, containing the \emph{Wolf}, \emph{Sheep}, and \emph{Cabbage}.  We
+will need a some way of determining which pairs cannot be left together (some
+state predicate).  
+
+\subparagraph{Type Invariant}  The river bank sets will be some subset of the
+initial collection.  If we set a constant from the model containing the wolf,
+sheep, and cabbage; it makes the problem more general (hence useful).  The
+banks will be some subset of this model set.
+
+\paragraph{Boat and Farmer} the boat and farmer can be abstracted out in some
+way.  We are only interested in moving one thing between the banks, the boat
+and farmer are implicitly moved.  We need to keep track of the boat contents
+and its location.  We can use a record for this.
+
+\subparagraph{Type invariant} The boat can be a record with a field for the
+passenger (an item from the constant set), and a location which will be the
+left or right bank.
+
+\paragraph{The Initial conditions} are that everything starts at the left
+bank.
+
+\paragraph{Safety Condition}
+We can't leave the Wolf and Sheep together, or the Sheep and Cabbage together. 
+We need some state predicate to say if a bank is safe to be left with it's
+occupants.  We can either test the state directly, or have an operator that
+tests if one thing eats another.  \emph{I'll go with the operator as this
+illustrates more of TLA+}
+
+\subparagraph{Eats} We want an operator that is true, if one thing eats
+another.  The model can supply a set of pairs (tuples) of things that eat
+another.  We can test if the parameters given to the operator form a pair in
+the model.
+
+\subparagraph{Bank is Safe} if there is no predator that can eat some prey.
+\begin{tla}
+Safe(bank) == \lnot \E predator \in bank :
+                    \E prey \in bank : Eats(predator,prey)
+\end{tla}
+\begin{tlatex}
+\@x{ Safe ( bank ) \.{\defeq} {\lnot} \E\, predator \.{\in} bank \.{:}}%
+\@x{\@s{72.98} \E\, prey \.{\in} bank \.{:} Eats ( predator ,\, prey )}%
+\end{tlatex}
+
+\paragraph{Actions} As a first look there are the following actions to
+consider.
+\begin{enumerate}
+	\item moving something from one bank to another
+	\item moving the boat while empty
+	\item loading the boat
+	\item unloading the boat
+\end{enumerate}
+Loading and Unloading the boat can be assumed to be part of moving one thing
+across the river.
+
+An action changes the state of the system.  Consider the change that occurs,
+\begin{enumerate}
+	\item One thing is now not on one bank
+	\item That same thing is now on the other bank
+	\item The boat has changed position
+\end{enumerate}
+
+We can write an operator that makes these changes.
+
+\subparagraph{Left-to-Right and Right-to-Left}
+We can now write some more explicit operators that handle individual moves.
+We can move something from the left-bank to the right-bank, if the boat is at
+the left bank, and the left-bank is left in a safe condition.
+\emph{Visa-versa} for the right-bank.
+
+\subparagraph{Empty move} Moving the boat when empty, changes the bank the
+boat is at, while leaving the left and right bank unchanged and in safe
+conditions..  
+
+\paragraph{Next action} The next action is a simple disjunction (OR) of moves
+where the move is:
+\begin{itemize}
+	\item an empty move
+	\item something can be moved from left to right banks
+	\item something can be moved from right to left banks
+\end{itemize}
+
+\paragraph{Complete} The puzzle is complete when the left-bank is empty and
+the right-bank is the model set.
+
+\subsection{Limitations}
+
+
+\section{Specification}
+
+\begin{tla}
+--------------------------- MODULE RiverCrossing ---------------------------
+CONSTANTS Farmyard,
+          Predates
+
+VARIABLES Leftbank,
+          Rightbank,
+          Boat
+
+TypeInvariant ==
+          /\ Leftbank \subseteq Farmyard
+          /\ Rightbank \subseteq Farmyard
+          /\ Boat \in {"left","right"}
+
+Init == 
+          /\ Leftbank = Farmyard
+          /\ Rightbank = {}
+          /\ Boat =  "left"
+------------
+Eats(predator, prey) == <<predator,prey>> \in Predates
+
+Opposite(bank) == IF bank="left" THEN "right" ELSE "left"
+
+Safe(bank) == \lnot \E predator \in bank : 
+                    \E prey \in bank : Eats(predator,prey)
+
+Move(thing, From, To) == 
+          /\ From' = From \ {thing}
+          /\ To'   = To \union {thing}
+          /\ Boat' = Opposite(Boat)
+
+MoveLeft(thing) ==
+          /\ Boat = "left"
+          /\ Move( thing, Leftbank, Rightbank )
+          /\ Safe(Leftbank')
+
+MoveRight(thing) == 
+          /\ Boat = "right"
+          /\ Move( thing, Rightbank, Leftbank )
+          /\ Safe(Rightbank')
+
+MoveEmpty ==
+          /\ Boat' = Opposite(Boat)
+          /\ UNCHANGED Leftbank /\ Safe(Leftbank)
+          /\ UNCHANGED Rightbank /\ Safe(Rightbank)
+------------
+Next == 
+          \/ MoveEmpty
+          \/ \E thing \in Leftbank : MoveLeft(thing) 
+          \/ \E thing \in Rightbank : MoveRight(thing) 
+
+Complete == 
+          /\ Leftbank = {}
+          /\ Rightbank = Farmyard
+
+=============================================================================
+\* Modification History
+\* Last modified Fri Feb 05 12:22:31 GMT 2021 by alunm
+\* Created Fri Feb 05 10:26:08 GMT 2021 by alunm
+\end{tla}
+\begin{tlatex}
+\@x{}\moduleLeftDash\@xx{ {\MODULE} RiverCrossing}\moduleRightDash\@xx{}%
+\@x{ {\CONSTANTS} Farmyard ,\,}%
+\@x{\@s{54.75} Predates}%
+\@pvspace{8.0pt}%
+\@x{ {\VARIABLES} Leftbank ,\,}%
+\@x{\@s{51.42} Rightbank ,\,}%
+\@x{\@s{51.42} Boat}%
+\@pvspace{8.0pt}%
+\@x{ TypeInvariant \.{\defeq}}%
+\@x{\@s{41.0} \.{\land} Leftbank \.{\subseteq} Farmyard}%
+\@x{\@s{41.0} \.{\land} Rightbank \.{\subseteq} Farmyard}%
+\@x{\@s{41.0} \.{\land} Boat \.{\in} \{\@w{left} ,\,\@w{right} \}}%
+\@pvspace{8.0pt}%
+\@x{ Init \.{\defeq}}%
+\@x{\@s{37.31} \.{\land} Leftbank \.{=} Farmyard}%
+\@x{\@s{37.31} \.{\land} Rightbank \.{=} \{ \}}%
+\@x{\@s{37.31} \.{\land} Boat \.{=}\@s{4.1}\@w{left}}%
+\@x{}\midbar\@xx{}%
+ \@x{ Eats ( predator ,\, prey ) \.{\defeq} {\langle} predator ,\, prey
+ {\rangle} \.{\in} Predates}%
+\@pvspace{8.0pt}%
+ \@x{ Opposite ( bank ) \.{\defeq} {\IF} bank \.{=}\@w{left}
+ \.{\THEN}\@w{right} \.{\ELSE}\@w{left}}%
+\@pvspace{8.0pt}%
+\@x{ Safe ( bank ) \.{\defeq} {\lnot} \E\, predator \.{\in} bank \.{:}}%
+\@x{\@s{72.98} \E\, prey \.{\in} bank \.{:} Eats ( predator ,\, prey )}%
+\@pvspace{8.0pt}%
+\@x{ Move ( thing ,\, From ,\, To ) \.{\defeq}}%
+ \@x{\@s{50.52} \.{\land} From \.{'} \.{=} From \.{\,\backslash\,} \{ thing
+ \}}%
+\@x{\@s{50.52} \.{\land} To \.{'}\@s{11.39} \.{=} To \.{\cup} \{ thing \}}%
+\@x{\@s{50.52} \.{\land} Boat \.{'}\@s{2.50} \.{=} Opposite ( Boat )}%
+\@pvspace{8.0pt}%
+\@x{ MoveLeft ( thing ) \.{\defeq}}%
+\@x{\@s{48.96} \.{\land} Boat \.{=}\@w{left}}%
+\@x{\@s{48.96} \.{\land} Move ( thing ,\, Leftbank ,\, Rightbank )}%
+\@x{\@s{48.96} \.{\land} Safe ( Leftbank \.{'} )}%
+\@pvspace{8.0pt}%
+\@x{ MoveRight ( thing ) \.{\defeq}}%
+\@x{\@s{51.25} \.{\land} Boat \.{=}\@w{right}}%
+\@x{\@s{51.25} \.{\land} Move ( thing ,\, Rightbank ,\, Leftbank )}%
+\@x{\@s{51.25} \.{\land} Safe ( Rightbank \.{'} )}%
+\@pvspace{8.0pt}%
+\@x{ MoveEmpty \.{\defeq}}%
+\@x{\@s{52.41} \.{\land} Boat \.{'} \.{=} Opposite ( Boat )}%
+\@x{\@s{52.41} \.{\land} {\UNCHANGED} Leftbank \.{\land} Safe ( Leftbank )}%
+\@x{\@s{52.41} \.{\land} {\UNCHANGED} Rightbank \.{\land} Safe ( Rightbank )}%
+\@x{}\midbar\@xx{}%
+\@x{ Next \.{\defeq}}%
+\@x{\@s{41.44} \.{\lor} MoveEmpty}%
+\@x{\@s{41.44} \.{\lor} \E\, thing \.{\in} Leftbank \.{:} MoveLeft ( thing )}%
+ \@x{\@s{41.44} \.{\lor} \E\, thing \.{\in} Rightbank \.{:} MoveRight ( thing
+ )}%
+\@pvspace{8.0pt}%
+\@x{ Complete \.{\defeq}}%
+\@x{\@s{45.48} \.{\land} Leftbank \.{=} \{ \}}%
+\@x{\@s{45.48} \.{\land} Rightbank \.{=} Farmyard}%
+\@pvspace{8.0pt}%
+\@x{}\bottombar\@xx{}%
+\@x{}%
+\@y{%
+  Modification History
+}%
+\@xx{}%
+\@x{}%
+\@y{%
+  Last modified Fri Feb 05 12:22:31 GMT 2021 by alunm
+}%
+\@xx{}%
+\@x{}%
+\@y{%
+  Created Fri Feb 05 10:26:08 GMT 2021 by alunm
+}%
+\@xx{}%
+\end{tlatex}
+
+\section{Model }
+
+\paragraph{Behaviour Specification}  is an \emph{Initial predicate and next-state
+relation} of
+\subparagraph{Initial predicate}
+\begin{tla}
+Initial
+\end{tla}
+\begin{tlatex}
+\@x{ Initial}%
+\end{tlatex}
+\subparagraph{Next-state relation}
+\begin{tla}
+Next
+\end{tla}
+\begin{tlatex}
+\@x{ Next}%
+\end{tlatex}
+
+\paragraph{Checking} The completion predicate is checked as an invariant
+
+\subparagraph{Invariants}~
+\begin{tla}
+\lnot Complete
+\end{tla}
+\begin{tlatex}
+\@x{ {\lnot} Complete}%
+\end{tlatex}
+
+
+\section{Results}
+A summary of the numbers of states found by the model checking is shown below.
+
+\subsection{Statistics}
+\paragraph{States found} for model as a whole
+
+\begin{table}[h]
+\begin{tabular}{lr}
+	\hline
+	States Found & 20 \\
+	Distinct States & 10 \\
+\hline
+\end{tabular}
+\end{table}
+
+\paragraph{Number of next states found} for the actions is:
+
+\begin{table}[h]
+\begin{tabular}{lrrr}
+	\hline
+	\textbf{Action} & \textbf{States found} & \textbf{Distinct states} \\ \hline
+	\textit{Init} (line 14) & 2 & 2 \\
+	\textit{MoveEmpty} (line 41) & 8 & 2 \\
+	\textit{Next} (line 48) & 14 & 5 \\
+	\textit{Next} (line 49) & 9 & 2 \\
+	\hline
+\end{tabular}
+\end{table}
+
+\subsection{Complete violated}
+The completion invariant is violated.  The error trace shows the following
+moves:
+\begin{table}[h]
+\begin{tabular}{rcccl}
+	\textbf{State} & \textit{Boat} & \textit{Leftbank} & \textit{Rightbank} &
+	\textbf{Action} \\\hline
+1 &
+\begin{tla}
+"left" 
+\end{tla} 
+\begin{tlatex}
+\@x{\@w{left}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Wolf", "Sheep", "Cabbage"} 
+\end{tla} 
+\begin{tlatex}
+\@x{ \{\@w{Wolf} ,\,\@w{Sheep} ,\,\@w{Cabbage} \}}%
+\end{tlatex}
+  &
+\begin{tla}
+{} 
+\end{tla} 
+\begin{tlatex}
+\@x{ \{ \}}%
+\end{tlatex}
+  &
+\textit{Initial predicate} \\
+
+2 &
+\begin{tla}
+"right" 
+\end{tla} 
+\begin{tlatex}
+\@x{\@w{right}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Wolf", "Cabbage"} 
+\end{tla} 
+\begin{tlatex}
+\@x{ \{\@w{Wolf} ,\,\@w{Cabbage} \}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Sheep"} 
+\end{tla} 
+\begin{tlatex}
+\@x{ \{\@w{Sheep} \}}%
+\end{tlatex}
+  &
+Next line 48 \\
+
+3 &
+\begin{tla}
+"left" 
+\end{tla} 
+\begin{tlatex}
+\@x{\@w{left}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Wolf", "Cabbage"} 
+\end{tla} 
+\begin{tlatex}
+\@x{ \{\@w{Wolf} ,\,\@w{Cabbage} \}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Sheep"} 
+\end{tla} 
+\begin{tlatex}
+\@x{ \{\@w{Sheep} \}}%
+\end{tlatex}
+  &
+MoveEmpty line 42 \\
+
+4 &
+\begin{tla}
+"right" 
+\end{tla} 
+\begin{tlatex}
+\@x{\@w{right}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Wolf"} 
+\end{tla}
+\begin{tlatex}
+\@x{ \{\@w{Wolf} \}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Sheep", "Cabbage"} 
+\end{tla} 
+\begin{tlatex}
+\@x{ \{\@w{Sheep} ,\,\@w{Cabbage} \}}%
+\end{tlatex}
+  &
+Next line 48 \\
+
+5 &
+\begin{tla}
+"left" 
+\end{tla} 
+\begin{tlatex}
+\@x{\@w{left}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Wolf", "Sheep"} 
+\end{tla}
+\begin{tlatex}
+\@x{ \{\@w{Wolf} ,\,\@w{Sheep} \}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Cabbage"} 
+\end{tla}
+\begin{tlatex}
+\@x{ \{\@w{Cabbage} \}}%
+\end{tlatex}
+  &
+Next line 49 \\
+
+6 &
+\begin{tla}
+"right" 
+\end{tla}
+\begin{tlatex}
+\@x{\@w{right}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Sheep"} 
+\end{tla}
+\begin{tlatex}
+\@x{ \{\@w{Sheep} \}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Wolf", "Cabbage"} 
+\end{tla}
+\begin{tlatex}
+\@x{ \{\@w{Wolf} ,\,\@w{Cabbage} \}}%
+\end{tlatex}
+  &
+Next line 48 \\
+
+7 &
+\begin{tla}
+"left" 
+\end{tla}
+\begin{tlatex}
+\@x{\@w{left}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Sheep"} 
+\end{tla}
+\begin{tlatex}
+\@x{ \{\@w{Sheep} \}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Wolf", "Cabbage"} 
+\end{tla}
+\begin{tlatex}
+\@x{ \{\@w{Wolf} ,\,\@w{Cabbage} \}}%
+\end{tlatex}
+  &
+MoveEmpty line 42 \\
+
+8 &
+\begin{tla}
+"right" 
+\end{tla}
+\begin{tlatex}
+\@x{\@w{right}}%
+\end{tlatex}
+  &
+\begin{tla}
+{} 
+\end{tla}
+\begin{tlatex}
+\@x{ \{ \}}%
+\end{tlatex}
+  &
+\begin{tla}
+{"Wolf", "Sheep", "Cabbage"} 
+\end{tla}
+\begin{tlatex}
+\@x{ \{\@w{Wolf} ,\,\@w{Sheep} ,\,\@w{Cabbage} \}}%
+\end{tlatex}
+  &
+Next line 48 \\
+  &&&&$\lnot\mathit{Complete}$ violated \\ \hline
+
+\end{tabular}
+\end{table}
+
+\end{document}
+
